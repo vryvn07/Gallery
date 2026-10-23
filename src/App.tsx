@@ -15,6 +15,7 @@ import { PhotoEditorModal } from './components/editor/PhotoEditorModal';
 import { CreateAlbumModal } from './components/dialogs/CreateAlbumModal';
 import { AddToAlbumModal } from './components/dialogs/AddToAlbumModal';
 import { RecentlyDeletedModal } from './components/dialogs/RecentlyDeletedModal';
+import { CreatorModal } from './components/dialogs/CreatorModal';
 
 export const GalleryAppContent: React.FC = () => {
   const {
@@ -37,6 +38,7 @@ export const GalleryAppContent: React.FC = () => {
   const [isCreateAlbumOpen, setIsCreateAlbumOpen] = useState(false);
   const [isAddToAlbumOpen, setIsAddToAlbumOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
+  const [isCreatorModalOpen, setIsCreatorModalOpen] = useState(false);
 
   // Push history state whenever an overlay or drilled-down view opens
   useEffect(() => {
@@ -47,6 +49,7 @@ export const GalleryAppContent: React.FC = () => {
       isTrashOpen ||
       isCreateAlbumOpen ||
       isAddToAlbumOpen ||
+      isCreatorModalOpen ||
       isSelectionMode ||
       activeAlbumId !== null;
 
@@ -60,6 +63,7 @@ export const GalleryAppContent: React.FC = () => {
     isTrashOpen,
     isCreateAlbumOpen,
     isAddToAlbumOpen,
+    isCreatorModalOpen,
     isSelectionMode,
     activeAlbumId !== null,
   ]);
@@ -81,6 +85,10 @@ export const GalleryAppContent: React.FC = () => {
       }
       if (isTrashOpen) {
         setIsTrashOpen(false);
+        return;
+      }
+      if (isCreatorModalOpen) {
+        setIsCreatorModalOpen(false);
         return;
       }
       if (isCreateAlbumOpen) {
@@ -108,6 +116,7 @@ export const GalleryAppContent: React.FC = () => {
     editingItem,
     activeViewerIndex,
     isTrashOpen,
+    isCreatorModalOpen,
     isCreateAlbumOpen,
     isAddToAlbumOpen,
     isSelectionMode,
@@ -128,6 +137,7 @@ export const GalleryAppContent: React.FC = () => {
       <AppHeader
         onOpenCreateAlbum={() => setIsCreateAlbumOpen(true)}
         onOpenAddPhotosToAlbum={() => setIsAddToAlbumOpen(true)}
+        onOpenCreatorProfile={() => setIsCreatorModalOpen(true)}
       />
 
       {/* Main View Router */}
@@ -138,7 +148,12 @@ export const GalleryAppContent: React.FC = () => {
           </div>
         ) : (
           <>
-            {activeTab === 'photos' && <PhotosGrid media={mediaList} />}
+            {activeTab === 'photos' && (
+              <PhotosGrid
+                media={mediaList}
+                onOpenCreatorProfile={() => setIsCreatorModalOpen(true)}
+              />
+            )}
 
             {activeTab === 'albums' && (
               activeAlbumId ? (
@@ -154,7 +169,10 @@ export const GalleryAppContent: React.FC = () => {
             {activeTab === 'search' && <SearchView />}
 
             {activeTab === 'settings' && (
-              <SettingsView onOpenTrash={() => setIsTrashOpen(true)} />
+              <SettingsView
+                onOpenTrash={() => setIsTrashOpen(true)}
+                onOpenCreatorProfile={() => setIsCreatorModalOpen(true)}
+              />
             )}
           </>
         )}
@@ -188,6 +206,12 @@ export const GalleryAppContent: React.FC = () => {
       <RecentlyDeletedModal
         isOpen={isTrashOpen}
         onClose={() => setIsTrashOpen(false)}
+      />
+
+      {/* Aryan Singh - Creator & Architect Profile Modal */}
+      <CreatorModal
+        isOpen={isCreatorModalOpen}
+        onClose={() => setIsCreatorModalOpen(false)}
       />
 
       {/* Toast notifications */}

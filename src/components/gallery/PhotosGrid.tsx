@@ -3,11 +3,13 @@ import { FolderPlus, Upload, ShieldCheck, Check, Sparkles } from 'lucide-react';
 import type { MediaItem } from '../../types/media';
 import { MediaThumbnail } from './MediaThumbnail';
 import { useGallery } from '../../context/GalleryContext';
+import { CreatorSignature } from '../layout/CreatorSignature';
 
 interface PhotosGridProps {
   media: MediaItem[];
   emptyMessage?: string;
   emptySubtext?: string;
+  onOpenCreatorProfile?: () => void;
 }
 
 interface DateGroup {
@@ -60,6 +62,7 @@ export const PhotosGrid: React.FC<PhotosGridProps> = ({
   media,
   emptyMessage = 'No photos or videos yet',
   emptySubtext = 'Connect a device folder or import files to start browsing your personal gallery.',
+  onOpenCreatorProfile,
 }) => {
   const {
     gridDensity,
@@ -145,10 +148,12 @@ export const PhotosGrid: React.FC<PhotosGridProps> = ({
           <span>Or load demo photos to explore</span>
         </button>
 
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 text-xs">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 text-xs mb-3">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
           <span>100% Private • Stored strictly on device • No cloud uploads</span>
         </div>
+
+        <CreatorSignature onOpenModal={onOpenCreatorProfile} />
       </div>
     );
   }
@@ -217,6 +222,14 @@ export const PhotosGrid: React.FC<PhotosGridProps> = ({
           </section>
         );
       })}
+
+      {/* Catalog count & Creator Signature */}
+      <footer className="pt-8 pb-16 px-4 flex flex-col items-center justify-center gap-2.5 text-center">
+        <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+          {media.length} {media.length === 1 ? 'item' : 'items'} in Gallery
+        </div>
+        <CreatorSignature onOpenModal={onOpenCreatorProfile} />
+      </footer>
     </div>
   );
 };

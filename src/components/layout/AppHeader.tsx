@@ -9,14 +9,18 @@ import {
 } from 'lucide-react';
 import { useGallery } from '../../context/GalleryContext';
 
+import { CreatorSignature } from './CreatorSignature';
+
 interface AppHeaderProps {
   onOpenCreateAlbum?: () => void;
   onOpenAddPhotosToAlbum?: () => void;
+  onOpenCreatorProfile?: () => void;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenCreateAlbum,
   onOpenAddPhotosToAlbum,
+  onOpenCreatorProfile,
 }) => {
   const {
     activeTab,
@@ -129,9 +133,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#12141c]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pt-safe transition-colors duration-200">
       <div className="max-w-screen-md mx-auto flex items-center justify-between h-14 px-4">
-        <h1 className="font-bold text-xl text-slate-900 dark:text-white tracking-tight">
-          {title}
-        </h1>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <h1 className="font-bold text-xl text-slate-900 dark:text-white tracking-tight truncate">
+            {title}
+          </h1>
+          {activeTab === 'photos' && onOpenCreatorProfile && (
+            <CreatorSignature onOpenModal={onOpenCreatorProfile} className="hidden sm:inline-flex" />
+          )}
+        </div>
 
         <div className="flex items-center gap-1">
           {activeTab === 'photos' && (

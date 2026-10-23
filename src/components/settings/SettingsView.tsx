@@ -28,13 +28,18 @@ import {
 } from '../../services/storage/storageQuota';
 import { isDirectoryPickerSupported } from '../../services/media/directoryAccess';
 import { db } from '../../services/storage/database';
+import { CreatorSignature } from '../layout/CreatorSignature';
 import type { StorageEstimateInfo } from '../../types/media';
 
 interface SettingsViewProps {
   onOpenTrash: () => void;
+  onOpenCreatorProfile?: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenTrash }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  onOpenTrash,
+  onOpenCreatorProfile,
+}) => {
   const { theme, setTheme } = useTheme();
   const {
     folders,
@@ -458,7 +463,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenTrash }) => {
         </div>
       </section>
 
-      {/* 6. Privacy & About */}
+      {/* 6. Creator & Platform Architect */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+          Creator & Architect
+        </h2>
+        <CreatorSignature variant="card" onOpenModal={onOpenCreatorProfile} />
+      </section>
+
+      {/* 7. Privacy & About */}
       <section className="bg-slate-50 dark:bg-slate-900/40 rounded-2xl p-5 border border-slate-200/60 dark:border-slate-800 text-center space-y-2">
         <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mb-1">
           <ShieldCheck className="w-6 h-6" />
