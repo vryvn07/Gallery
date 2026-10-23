@@ -1,5 +1,6 @@
 /**
  * Generates lightweight, high-performance thumbnail blobs for smooth grid rendering.
+ * Uses hardware-accelerated createImageBitmap where supported with graceful DOM fallbacks.
  */
 
 export interface ThumbnailResult {
@@ -12,12 +13,68 @@ export interface ThumbnailResult {
 const MAX_THUMB_SIZE = 400;
 
 export async function generateImageThumbnail(fileOrBlob: Blob): Promise<ThumbnailResult> {
-  const url = URL.createObjectURL(fileOrBlob);
+  // Ultra-fast path: Native browser createImageBitmap (off-main-thread decode, 10x faster)
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(fileOrBlob);
+      const origWidth = bitmap.width || 800;
+      const origHeight = bitmap.height || 600;
 
+      let thumbWidth = origWidth;
+      let thumbHeight = origHeight;
+
+      if (origWidth > origHeight) {
+        if (origWidth > MAX_THUMB_SIZE) {
+          thumbHeight = Math.max(1, Math.round((origHeight * MAX_THUMB_SIZE) / origWidth));
+          thumbWidth = MAX_THUMB_SIZE;
+        }
+      } else {
+        if (origHeight > MAX_THUMB_SIZE) {
+          thumbWidth = Math.max(1, Math.round((origWidth * MAX_THUMB_SIZE) / origHeight));
+          thumbHeight = MAX_THUMB_SIZE;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, thumbWidth);
+      canvas.height = Math.max(1, thumbHeight);
+      const ctx = canvas.getContext('2d');
+
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'medium';
+        ctx.drawImage(bitmap, 0, 0, thumbWidth, thumbHeight);
+      }
+      bitmap.close();
+
+      const thumbnailBlob = await new Promise<Blob>((resolve) => {
+        if (!canvas.toBlob) {
+          resolve(new Blob(['thumb'], { type: 'image/webp' }));
+          return;
+        }
+        canvas.toBlob(
+          (b) => resolve(b || new Blob(['thumb'], { type: 'image/webp' })),
+          'image/webp',
+          0.8
+        );
+      });
+
+      return {
+        thumbnailBlob,
+        width: origWidth,
+        height: origHeight,
+      };
+    } catch {
+      // Fall through to Image() fallback for unsupported formats
+    }
+  }
+
+  // Fallback path: HTMLImageElement
+  const url = URL.createObjectURL(fileOrBlob);
   try {
     const img = new Image();
     await new Promise<void>((resolve) => {
-      const t = setTimeout(() => resolve(), 250);
+      const t = setTimeout(() => resolve(), 3500);
       img.onload = () => {
         clearTimeout(t);
         resolve();
@@ -37,12 +94,12 @@ export async function generateImageThumbnail(fileOrBlob: Blob): Promise<Thumbnai
 
     if (origWidth > origHeight) {
       if (origWidth > MAX_THUMB_SIZE) {
-        thumbHeight = Math.round((origHeight * MAX_THUMB_SIZE) / origWidth);
+        thumbHeight = Math.max(1, Math.round((origHeight * MAX_THUMB_SIZE) / origWidth));
         thumbWidth = MAX_THUMB_SIZE;
       }
     } else {
       if (origHeight > MAX_THUMB_SIZE) {
-        thumbWidth = Math.round((origWidth * MAX_THUMB_SIZE) / origHeight);
+        thumbWidth = Math.max(1, Math.round((origWidth * MAX_THUMB_SIZE) / origHeight));
         thumbHeight = MAX_THUMB_SIZE;
       }
     }
@@ -53,6 +110,7 @@ export async function generateImageThumbnail(fileOrBlob: Blob): Promise<Thumbnai
     const ctx = canvas.getContext('2d');
 
     if (ctx) {
+      ctx.imageSmoothingEnabled = true;
       ctx.drawImage(img, 0, 0, thumbWidth, thumbHeight);
     }
 
@@ -64,7 +122,7 @@ export async function generateImageThumbnail(fileOrBlob: Blob): Promise<Thumbnai
       canvas.toBlob(
         (b) => resolve(b || new Blob(['thumb'], { type: 'image/webp' })),
         'image/webp',
-        0.82
+        0.8
       );
     });
 
@@ -88,13 +146,15 @@ export async function generateVideoThumbnail(fileOrBlob: Blob): Promise<Thumbnai
     video.playsInline = true;
     video.src = url;
 
+    let captured = false;
+
     const timeout = setTimeout(() => {
+      if (captured) return;
       cleanup();
-      // Provide fallback generic thumbnail on timeout
       createFallbackVideoThumbnail()
         .then((fb) => resolve({ thumbnailBlob: fb, width: 640, height: 360, duration: 0 }))
         .catch(reject);
-    }, 4500);
+    }, 2000);
 
     const cleanup = () => {
       clearTimeout(timeout);
@@ -104,13 +164,8 @@ export async function generateVideoThumbnail(fileOrBlob: Blob): Promise<Thumbnai
       URL.revokeObjectURL(url);
     };
 
-    video.onloadedmetadata = () => {
-      // Seek to 1 second or halfway into short video
-      const targetTime = Math.min(1.0, (video.duration || 1) / 2);
-      video.currentTime = targetTime;
-    };
-
-    video.onseeked = () => {
+    const tryCaptureFrame = () => {
+      if (captured) return;
       try {
         const origWidth = video.videoWidth || 640;
         const origHeight = video.videoHeight || 360;
@@ -121,12 +176,12 @@ export async function generateVideoThumbnail(fileOrBlob: Blob): Promise<Thumbnai
 
         if (origWidth > origHeight) {
           if (origWidth > MAX_THUMB_SIZE) {
-            thumbHeight = Math.round((origHeight * MAX_THUMB_SIZE) / origWidth);
+            thumbHeight = Math.max(1, Math.round((origHeight * MAX_THUMB_SIZE) / origWidth));
             thumbWidth = MAX_THUMB_SIZE;
           }
         } else {
           if (origHeight > MAX_THUMB_SIZE) {
-            thumbWidth = Math.round((origWidth * MAX_THUMB_SIZE) / origHeight);
+            thumbWidth = Math.max(1, Math.round((origWidth * MAX_THUMB_SIZE) / origHeight));
             thumbHeight = MAX_THUMB_SIZE;
           }
         }
@@ -137,10 +192,11 @@ export async function generateVideoThumbnail(fileOrBlob: Blob): Promise<Thumbnai
         const ctx = canvas.getContext('2d');
 
         if (!ctx) {
-          throw new Error('Canvas 2D context unavailable');
+          throw new Error('Canvas 2D unavailable');
         }
 
         ctx.drawImage(video, 0, 0, thumbWidth, thumbHeight);
+        captured = true;
 
         canvas.toBlob(
           (blob) => {
@@ -166,6 +222,22 @@ export async function generateVideoThumbnail(fileOrBlob: Blob): Promise<Thumbnai
         createFallbackVideoThumbnail()
           .then((fb) => resolve({ thumbnailBlob: fb, width: 640, height: 360, duration: 0 }))
           .catch(reject);
+      }
+    };
+
+    video.onloadedmetadata = () => {
+      const targetTime = Math.min(1.0, (video.duration || 1) / 2);
+      video.currentTime = targetTime;
+    };
+
+    video.onseeked = () => {
+      tryCaptureFrame();
+    };
+
+    video.onloadeddata = () => {
+      // In case seeked is delayed, loadeddata provides an instant valid initial frame
+      if (!captured && video.videoWidth > 0) {
+        tryCaptureFrame();
       }
     };
 

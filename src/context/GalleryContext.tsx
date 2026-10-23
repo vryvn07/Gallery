@@ -248,10 +248,11 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDetailsItem(null);
   };
 
-  // Connect new folder via Directory Picker
+  // Connect new folder via Directory Picker (with graceful fallback to file picker)
   const connectNewFolder = async () => {
     if (!isDirectoryPickerSupported()) {
-      showToast('Folder access is not supported in this browser. Use manual import.', 'error');
+      showToast('Selecting photos directly from your device...', 'info');
+      await importManualFiles();
       return;
     }
 
@@ -292,15 +293,29 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Fallback / manual import
   const importManualFiles = async () => {
     try {
+      setSyncStatus({ state: 'checking', message: 'Selecting files...' });
       const files = await selectLocalFiles();
-      if (files.length === 0) return;
+      if (files.length === 0) {
+        setSyncStatus({ state: 'idle', message: '' });
+        return;
+      }
+
+      setSyncStatus({
+        state: 'indexing',
+        message: `Importing ${files.length} items...`,
+        itemsIndexed: 0,
+      });
 
       const count = await importFiles(files, (status) => {
         setSyncStatus(status);
       });
 
-      showToast(`Imported ${count} items`, 'success');
+      showToast(`Imported ${count} ${count === 1 ? 'item' : 'items'} into Gallery`, 'success');
+      setTimeout(() => {
+        setSyncStatus({ state: 'idle', message: '' });
+      }, 3000);
     } catch (err: any) {
+      setSyncStatus({ state: 'error', message: err.message || 'Import failed' });
       showToast(err.message || 'File import failed', 'error');
     }
   };

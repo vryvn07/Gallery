@@ -25,6 +25,69 @@ export function detectMediaType(filename: string, mimeType: string): 'image' | '
 }
 
 /**
+ * Updates item counts for all system and custom albums in one optimized pass
+ */
+export async function updateSystemAlbumCounts(): Promise<void> {
+  try {
+    const albums = await db.albums.toArray();
+    for (const album of albums) {
+      const count = await db.albumMedia.where('albumId').equals(album.id).count();
+      await db.albums.update(album.id, { itemCount: count, updatedAt: Date.now() });
+    }
+  } catch (err) {
+    console.warn('Failed to update album counts:', err);
+  }
+}
+
+/**
+ * Categorizes media item into relevant system albums
+ */
+async function autoCategorizeMedia(item: MediaItem, skipCountUpdate = false): Promise<void> {
+  const albumsToJoin: string[] = ['sys_all', 'sys_recent'];
+
+  if (item.type === 'video') {
+    albumsToJoin.push('sys_videos');
+  }
+
+  const lowerName = item.name.toLowerCase();
+  const lowerPath = (item.relativePath || '').toLowerCase();
+  const lowerFolder = (item.folderName || '').toLowerCase();
+
+  if (lowerName.includes('screenshot') || lowerPath.includes('screenshot') || lowerFolder.includes('screenshot')) {
+    albumsToJoin.push('sys_screenshots');
+  }
+
+  if (lowerFolder.includes('camera') || lowerFolder.includes('dcim') || lowerPath.includes('camera') || lowerPath.includes('dcim')) {
+    albumsToJoin.push('sys_camera');
+  }
+
+  if (lowerFolder.includes('download') || lowerPath.includes('download')) {
+    albumsToJoin.push('sys_downloads');
+  }
+
+  if (item.isFavorite) {
+    albumsToJoin.push('sys_favorites');
+  }
+
+  // Fast direct upserts without redundant pre-queries
+  for (const albumId of albumsToJoin) {
+    await db.albumMedia.put({
+      id: `${albumId}_${item.id}`,
+      albumId,
+      mediaId: item.id,
+      addedAt: Date.now(),
+    });
+  }
+
+  if (!skipCountUpdate) {
+    for (const albumId of albumsToJoin) {
+      const count = await db.albumMedia.where('albumId').equals(albumId).count();
+      await db.albums.update(albumId, { itemCount: count, updatedAt: Date.now() });
+    }
+  }
+}
+
+/**
  * Indexes a single file (either imported or referenced)
  */
 export async function indexMediaFile(
@@ -34,6 +97,7 @@ export async function indexMediaFile(
     folderId?: string;
     folderName?: string;
     relativePath?: string;
+    skipCountUpdate?: boolean;
   }
 ): Promise<MediaItem | null> {
   const type = detectMediaType(file.name, file.type);
@@ -100,66 +164,13 @@ export async function indexMediaFile(
   await db.media.put(mediaItem);
 
   // Link to system albums
-  await autoCategorizeMedia(mediaItem);
+  await autoCategorizeMedia(mediaItem, options.skipCountUpdate);
 
   return mediaItem;
 }
 
 /**
- * Categorizes media item into relevant system albums
- */
-async function autoCategorizeMedia(item: MediaItem): Promise<void> {
-  const albumsToJoin: string[] = ['sys_all', 'sys_recent'];
-
-  if (item.type === 'video') {
-    albumsToJoin.push('sys_videos');
-  }
-
-  const lowerName = item.name.toLowerCase();
-  const lowerPath = (item.relativePath || '').toLowerCase();
-  const lowerFolder = (item.folderName || '').toLowerCase();
-
-  if (lowerName.includes('screenshot') || lowerPath.includes('screenshot') || lowerFolder.includes('screenshot')) {
-    albumsToJoin.push('sys_screenshots');
-  }
-
-  if (lowerFolder.includes('camera') || lowerFolder.includes('dcim') || lowerPath.includes('camera') || lowerPath.includes('dcim')) {
-    albumsToJoin.push('sys_camera');
-  }
-
-  if (lowerFolder.includes('download') || lowerPath.includes('download')) {
-    albumsToJoin.push('sys_downloads');
-  }
-
-  if (item.isFavorite) {
-    albumsToJoin.push('sys_favorites');
-  }
-
-  for (const albumId of albumsToJoin) {
-    const existing = await db.albumMedia
-      .where('[albumId+mediaId]')
-      .equals([albumId, item.id])
-      .first();
-
-    if (!existing) {
-      await db.albumMedia.put({
-        id: `${albumId}_${item.id}`,
-        albumId,
-        mediaId: item.id,
-        addedAt: Date.now(),
-      });
-    }
-  }
-
-  // Update album item counts
-  for (const albumId of albumsToJoin) {
-    const count = await db.albumMedia.where('albumId').equals(albumId).count();
-    await db.albums.update(albumId, { itemCount: count, updatedAt: Date.now() });
-  }
-}
-
-/**
- * Scans a connected folder using its saved DirectoryHandle
+ * Scans a connected folder using its saved DirectoryHandle with concurrent processing
  */
 export async function scanFolder(
   folderId: string,
@@ -192,31 +203,45 @@ export async function scanFolder(
 
   const entries = await scanDirectoryEntries(handle, 2);
   let indexedCount = 0;
+  let processed = 0;
 
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    try {
-      const item = await indexMediaFile(entry.file, {
-        storageMode: 'referenced',
-        folderId,
-        folderName: folderRecord.name,
-        relativePath: entry.relativePath,
-      });
-      if (item) {
-        indexedCount++;
+  // Concurrent worker pool (4 items simultaneously)
+  const CONCURRENCY = 4;
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < entries.length) {
+      const idx = cursor++;
+      const entry = entries[idx];
+      try {
+        const item = await indexMediaFile(entry.file, {
+          storageMode: 'referenced',
+          folderId,
+          folderName: folderRecord.name,
+          relativePath: entry.relativePath,
+          skipCountUpdate: true,
+        });
+        if (item) indexedCount++;
+      } catch (err) {
+        console.warn(`Error indexing ${entry.name}:`, err);
       }
-    } catch (err) {
-      console.warn(`Error indexing ${entry.name}:`, err);
-    }
 
-    if (i % 5 === 0 || i === entries.length - 1) {
-      onStatus?.({
-        state: 'indexing',
-        message: `Indexed ${indexedCount} of ${entries.length} items...`,
-        itemsIndexed: indexedCount,
-      });
+      processed++;
+      if (processed % 4 === 0 || processed === entries.length) {
+        onStatus?.({
+          state: 'indexing',
+          message: `Indexed ${indexedCount} of ${entries.length} items...`,
+          itemsIndexed: indexedCount,
+        });
+      }
     }
-  }
+  };
+
+  const pool = Array.from({ length: Math.min(CONCURRENCY, entries.length) }, worker);
+  await Promise.all(pool);
+
+  // Update album statistics once after batch finishes
+  await updateSystemAlbumCounts();
 
   await db.folders.update(folderId, {
     itemCount: indexedCount,
@@ -252,7 +277,7 @@ export async function syncAllFolders(onStatus?: (status: SyncStatus) => void): P
 }
 
 /**
- * Imports multiple files selected manually by user
+ * Imports multiple files selected manually by user using high-speed concurrent processing
  */
 export async function importFiles(
   files: File[],
@@ -260,29 +285,46 @@ export async function importFiles(
 ): Promise<number> {
   if (files.length === 0) return 0;
 
-  onStatus?.({ state: 'indexing', message: `Importing ${files.length} files...` });
+  onStatus?.({ state: 'indexing', message: `Importing ${files.length} items...` });
 
   let count = 0;
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    try {
-      const item = await indexMediaFile(file, {
-        storageMode: 'imported',
-        folderName: 'Manual Import',
-      });
-      if (item) count++;
-    } catch (e) {
-      console.warn('Import file failed:', file.name, e);
-    }
+  let processed = 0;
 
-    if (i % 3 === 0 || i === files.length - 1) {
-      onStatus?.({
-        state: 'indexing',
-        message: `Imported ${count} of ${files.length}...`,
-        itemsIndexed: count,
-      });
+  // Process up to 4 files simultaneously
+  const CONCURRENCY = 4;
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < files.length) {
+      const idx = cursor++;
+      const file = files[idx];
+      try {
+        const item = await indexMediaFile(file, {
+          storageMode: 'imported',
+          folderName: 'Manual Import',
+          skipCountUpdate: true,
+        });
+        if (item) count++;
+      } catch (e) {
+        console.warn('Import file failed:', file.name, e);
+      }
+
+      processed++;
+      if (processed % 2 === 0 || processed === files.length) {
+        onStatus?.({
+          state: 'indexing',
+          message: `Importing (${count}/${files.length})...`,
+          itemsIndexed: count,
+        });
+      }
     }
-  }
+  };
+
+  const pool = Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker);
+  await Promise.all(pool);
+
+  // Update album statistics once after batch finishes
+  await updateSystemAlbumCounts();
 
   onStatus?.({
     state: 'success',

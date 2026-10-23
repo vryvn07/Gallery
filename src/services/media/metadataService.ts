@@ -2,7 +2,7 @@ import exifr from 'exifr';
 import type { ExifData } from '../../types/media';
 
 /**
- * Extracts EXIF camera metadata safely from an image File or Blob with timeout protection
+ * Extracts EXIF camera metadata safely from an image File or Blob with high performance
  */
 export async function extractExifMetadata(fileOrBlob: Blob): Promise<ExifData | undefined> {
   // Only attempt EXIF on image formats that support it (JPEG, TIFF, WebP, HEIC)
@@ -10,8 +10,21 @@ export async function extractExifMetadata(fileOrBlob: Blob): Promise<ExifData | 
     return undefined;
   }
 
+  // Non-EXIF image types can be skipped to avoid unnecessary processing
+  if (
+    fileOrBlob.type === 'image/svg+xml' ||
+    fileOrBlob.type === 'image/gif' ||
+    fileOrBlob.type === 'image/png'
+  ) {
+    return undefined;
+  }
+
   try {
-    const parsePromise = exifr.parse(fileOrBlob, {
+    // Slicing first 131,072 bytes (128 KB) avoids reading multi-megabyte files into memory,
+    // as EXIF metadata headers reside strictly in the file header.
+    const slice = fileOrBlob.size > 131072 ? fileOrBlob.slice(0, 131072) : fileOrBlob;
+
+    const parsePromise = exifr.parse(slice, {
       tiff: true,
       exif: true,
       gps: true,
@@ -30,9 +43,9 @@ export async function extractExifMetadata(fileOrBlob: Blob): Promise<ExifData | 
       ],
     });
 
-    // 600ms timeout guard to prevent hangs on corrupted or invalid file headers
+    // 250ms timeout guard to prevent hangs on corrupted or invalid file headers
     const timeoutPromise = new Promise<undefined>((resolve) =>
-      setTimeout(() => resolve(undefined), 600)
+      setTimeout(() => resolve(undefined), 250)
     );
 
     const raw = await Promise.race([parsePromise, timeoutPromise]);
@@ -58,7 +71,7 @@ export async function extractExifMetadata(fileOrBlob: Blob): Promise<ExifData | 
     if (raw.Orientation) exif.orientation = Number(raw.Orientation);
 
     return exif;
-  } catch (err) {
+  } catch {
     // Non-blocking: images without EXIF or with corrupted headers are handled safely
     return undefined;
   }

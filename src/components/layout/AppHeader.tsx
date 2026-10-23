@@ -34,6 +34,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     deselectAll,
     setIsSelectionMode,
     rescanFolders,
+    importManualFiles,
     syncStatus,
     gridDensity,
     setGridDensity,
@@ -145,6 +146,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <div className="flex items-center gap-1">
           {activeTab === 'photos' && (
             <>
+              {/* Add photos / Import button */}
+              <button
+                onClick={() => importManualFiles()}
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-blue-600 dark:text-blue-400 transition-colors"
+                title="Add photos to Gallery"
+                aria-label="Add photos"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+
               {/* Density toggle button */}
               <button
                 onClick={cycleGridDensity}
