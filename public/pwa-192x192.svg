@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Iridescent chromatic rainbow bevel gradient -->
+    <linearGradient id="rainbowBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="25%" stop-color="#4facfe" />
+      <stop offset="50%" stop-color="#f093fb" />
+      <stop offset="75%" stop-color="#f5576c" />
+      <stop offset="100%" stop-color="#00f2fe" />
+    </linearGradient>
+
+    <!-- Glass ambient shadow -->
+    <filter id="glassShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.14" />
+    </filter>
+
+    <linearGradient id="glassSurface" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#f0f2f6" stop-opacity="0.85" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base Canvas -->
+  <rect width="512" height="512" rx="128" fill="#f4f5f8" />
+
+  <!-- Outer Glass Squircle Slab with Rainbow Edge Glow -->
+  <rect x="56" y="56" width="400" height="400" rx="108" fill="url(#glassSurface)" stroke="url(#rainbowBevel)" stroke-width="8" filter="url(#glassShadow)" />
+
+  <!-- Glass Inner Bevel Highlight -->
+  <rect x="66" y="66" width="380" height="380" rx="98" fill="none" stroke="#ffffff" stroke-width="4" stroke-opacity="0.8" />
+
+  <!-- Mountain Silhouette (Black Obsidian) -->
+  <!-- Left Mountain Peak -->
+  <path d="M128 336L228 196C236 185 252 185 260 196L332 300L292 336H128Z" fill="#111317" />
+  
+  <!-- Right Mountain Peak & Slope -->
+  <path d="M272 336L324 256C332 244 348 244 356 256L384 300V320C384 329 377 336 368 336H272Z" fill="#111317" />
+  
+  <!-- Continuous Base Curve -->
+  <path d="M144 336H368C377 336 384 329 384 320V300L356 256C348 244 332 244 324 256L272 336H260L228 196C220 185 204 185 196 196L128 300C128 320 134 336 144 336Z" fill="#111317" />
+
+  <!-- Floating Sun/Moon Circle -->
+  <circle cx="328" cy="184" r="40" fill="#111317" />
+</svg>
